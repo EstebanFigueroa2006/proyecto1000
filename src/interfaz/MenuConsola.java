@@ -1,6 +1,8 @@
 package interfaz;
 
 import modelo.Producto;
+import modelo.ProductoNoPerecedero;
+import modelo.ProductoPerecedero;
 import negocio.GestionInventario;
 
 import java.time.LocalDate;
@@ -71,14 +73,19 @@ public class MenuConsola {
         double precio = solicitarDoublePositivo("Precio de Compra (Costo) ($): ");
         double pvp = solicitarDoublePositivo("Precio de Venta al Público (PVP) ($): ");
 
-        String fechaStr = solicitarFechaCaducidad();
+        String fechaStr = solicitarFechaRegistro();
 
-        int desgaste = 0;
+        Producto p;
         if (fechaStr.equalsIgnoreCase("N/A")) {
-            desgaste = solicitarPorcentaje("Porcentaje de Desgaste Actual (0-100): ");
+
+            int desgaste = solicitarPorcentaje("Porcentaje de Desgaste Actual (0-100): ");
+            p = new ProductoNoPerecedero(id, nombre, stock, min, precio, pvp, desgaste);
+        } else {
+
+            LocalDate fecha = LocalDate.parse(fechaStr);
+            p = new ProductoPerecedero(id, nombre, stock, min, precio, pvp, fecha);
         }
 
-        Producto p = new Producto(id, nombre, stock, min, precio, pvp, fechaStr, desgaste);
         if (negocio.agregarProducto(p)) {
             System.out.println(" Producto registrado exitosamente.");
         }
@@ -105,8 +112,13 @@ public class MenuConsola {
             System.out.println("3. Actualizar Stock Mínimo");
             System.out.println("4. Actualizar Precio de Compra (Costo)");
             System.out.println("5. Actualizar Precio de Venta (PVP)");
-            System.out.println("6. Actualizar Fecha de Caducidad");
-            System.out.println("7. Actualizar Desgaste");
+
+            if (p instanceof ProductoPerecedero) {
+                System.out.println("6. Actualizar Fecha de Caducidad");
+            } else if (p instanceof ProductoNoPerecedero) {
+                System.out.println("6. Actualizar Desgaste");
+            }
+
             System.out.println("0. Volver al menú principal");
             System.out.print("Seleccione una opción: ");
 
@@ -130,14 +142,13 @@ public class MenuConsola {
                         p.setPrecioVentaPublico(solicitarDoublePositivo("Nuevo PVP ($): "));
                         break;
                     case 6:
-                        p.setFechaCaducidad(solicitarFechaCaducidad());
-                        if (!p.getFechaCaducidad().equalsIgnoreCase("N/A")) {
-                            p.setPorcentajeDesgaste(0); // Si caduca, reiniciamos el desgaste
+                        if (p instanceof ProductoPerecedero) {
+                            LocalDate nuevaFecha = solicitarFechaEstricta();
+                            ((ProductoPerecedero) p).setFechaCaducidad(nuevaFecha);
+                        } else if (p instanceof ProductoNoPerecedero) {
+                            int nuevoDesgaste = solicitarPorcentaje("Nuevo desgaste (0-100): ");
+                            ((ProductoNoPerecedero) p).setPorcentajeDesgaste(nuevoDesgaste);
                         }
-                        break;
-                    case 7:
-                        p.setPorcentajeDesgaste(solicitarPorcentaje("Nuevo desgaste (0-100): "));
-                        p.setFechaCaducidad("N/A"); // Si tiene desgaste, asumimos que no caduca
                         break;
                     case 0:
                         System.out.println("Actualización finalizada.");
@@ -174,7 +185,6 @@ public class MenuConsola {
         }
     }
 
-    // --- MÉTODOS DE VALIDACIÓN ---
 
     private int solicitarEnteroPositivo(String mensaje) {
         int valor = -1;
@@ -182,9 +192,7 @@ public class MenuConsola {
             System.out.print(mensaje);
             try {
                 valor = Integer.parseInt(scanner.nextLine());
-                if (valor < 0) {
-                    System.out.println(" Error: El valor no puede ser negativo. Intente de nuevo.");
-                }
+                if (valor < 0) System.out.println(" Error: El valor no puede ser negativo.");
             } catch (NumberFormatException e) {
                 System.out.println(" Error: Ingrese un número entero válido.");
             }
@@ -198,9 +206,7 @@ public class MenuConsola {
             System.out.print(mensaje);
             try {
                 valor = Double.parseDouble(scanner.nextLine());
-                if (valor < 0) {
-                    System.out.println(" Error: El valor no puede ser negativo. Intente de nuevo.");
-                }
+                if (valor < 0) System.out.println(" Error: El valor no puede ser negativo.");
             } catch (NumberFormatException e) {
                 System.out.println(" Error: Ingrese un valor numérico válido.");
             }
@@ -214,9 +220,7 @@ public class MenuConsola {
             System.out.print(mensaje);
             try {
                 valor = Integer.parseInt(scanner.nextLine());
-                if (valor < 0 || valor > 100) {
-                    System.out.println(" Error: El porcentaje debe estar entre 0 y 100.");
-                }
+                if (valor < 0 || valor > 100) System.out.println(" Error: El porcentaje debe estar entre 0 y 100.");
             } catch (NumberFormatException e) {
                 System.out.println(" Error: Ingrese un número válido.");
             }
@@ -224,7 +228,8 @@ public class MenuConsola {
         return valor;
     }
 
-    private String solicitarFechaCaducidad() {
+
+    private String solicitarFechaRegistro() {
         String fechaStr = "";
         boolean fechaValida = false;
         while (!fechaValida) {
@@ -237,7 +242,7 @@ public class MenuConsola {
                 try {
                     LocalDate fechaIngresada = LocalDate.parse(fechaStr);
                     if (fechaIngresada.isBefore(FECHA_ACTUAL)) {
-                        System.out.println(" Error: La fecha ingresada ya pasó. La fecha actual es " + FECHA_ACTUAL + ". Producto expirado.");
+                        System.out.println(" Error: La fecha ya pasó. Fecha actual: " + FECHA_ACTUAL + ". Producto expirado.");
                     } else {
                         fechaValida = true;
                     }
@@ -249,7 +254,25 @@ public class MenuConsola {
         return fechaStr;
     }
 
-    // ----------------------------
+
+    private LocalDate solicitarFechaEstricta() {
+        LocalDate fechaValida = null;
+        while (fechaValida == null) {
+            System.out.print("Nueva Fecha de Caducidad (AAAA-MM-DD): ");
+            try {
+                LocalDate fechaIngresada = LocalDate.parse(scanner.nextLine().trim());
+                if (fechaIngresada.isBefore(FECHA_ACTUAL)) {
+                    System.out.println(" Error: La fecha ya pasó. Fecha actual: " + FECHA_ACTUAL + ".");
+                } else {
+                    fechaValida = fechaIngresada;
+                }
+            } catch (DateTimeParseException e) {
+                System.out.println(" Error: Formato incorrecto. Use AAAA-MM-DD.");
+            }
+        }
+        return fechaValida;
+    }
+
 
     private void mostrarInventario() {
         System.out.println("\n---INVENTARIO EN BODEGA CENTRAL---");
@@ -280,8 +303,7 @@ public class MenuConsola {
     }
 
     private void cargarDatosPredefinidos() {
-        // Se agregó un PVP ficticio (85.00 costo -> 110.00 PVP | 120.00 costo -> 150.00 PVP)
-        negocio.agregarProducto(new Producto("P01", "Pintura Látex", 50, 10, 85.00, 110.00, "2026-06-30", 0));
-        negocio.agregarProducto(new Producto("H01", "Andamio Estructural", 12, 3, 120.00, 150.00, "N/A", 10));
+        negocio.agregarProducto(new ProductoPerecedero("P01", "Pintura Látex", 50, 10, 85.00, 110.00, LocalDate.of(2026, 6, 30)));
+        negocio.agregarProducto(new ProductoNoPerecedero("H01", "Andamio Estructural", 12, 3, 120.00, 150.00, 10));
     }
 }

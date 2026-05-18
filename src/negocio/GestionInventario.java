@@ -37,9 +37,7 @@ public class GestionInventario {
         return null;
     }
 
-    public List<Producto> getListaProductos() {
-        return listaProductos;
-    }
+    public List<Producto> getListaProductos() { return listaProductos; }
 
     private int calcularStockTotal() {
         int total = 0;
